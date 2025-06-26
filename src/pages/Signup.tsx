@@ -1,5 +1,5 @@
 // pages/Signup.tsx
-import SignupForm from '@/components/SignUpForm';
+import SignupForm from '@/components/SignupForm';
 
 export default function Signup() {
   return (
