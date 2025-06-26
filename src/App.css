@@ -1,0 +1,186 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+
+.logo:hover {
+  filter: drop-shadow(0 0 2em rgba(20, 184, 166, 0.6));
+}
+
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em rgba(20, 184, 166, 0.6));
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(20, 184, 166, 0.1);
+  background-color: rgba(20, 184, 166, 0.02);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  border-color: rgba(20, 184, 166, 0.3);
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.1);
+}
+
+.read-the-docs {
+  color: #5f7676;
+}
+
+/* Add this CSS to your stylesheet (e.g., globals.css or a component-specific CSS file) */
+
+@media (max-width: 768px) {
+  /* Adjustments for general tablet/mobile view */
+
+  .absolute.top-4.left-4.z-10 { /* Top bar */
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 1rem;
+    left: 1rem;
+    right: 1rem; /* Make it full width with padding */
+    width: auto; /* Allow auto width */
+    top: 0.5rem; /* Adjust top position slightly */
+  }
+
+  .absolute.top-4.left-4.z-10 > div:first-child { /* Buttons container */
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    gap: 0.5rem; /* Reduce gap between buttons */
+  }
+
+  .absolute.top-4.left-4.z-10 > div:first-child > button { /* Individual buttons */
+    width: 100%; /* Make buttons full width */
+    justify-content: center; /* Center text in buttons */
+  }
+
+  .absolute.top-4.left-4.z-10 .flex.gap-6 { /* Info stats (orders, clients, revenue) */
+    flex-direction: row; /* Keep them in a row if space allows */
+    justify-content: space-around;
+    width: 100%;
+    margin-top: 0.75rem; /* Add some margin from buttons */
+    padding-top: 0.75rem;
+    border-top: 1px solid #e2e8f0; /* Ensure border is visible */
+    border-left: none; /* Remove left border */
+    padding-left: 0; /* Remove left padding */
+  }
+
+  /* Filter Panel */
+  .absolute.top-24.left-4.z-10.bg-white\/95 { /* Filter panel */
+    top: 10rem; /* Push it down below the expanded top bar */
+    left: 1rem;
+    right: 1rem;
+    width: auto; /* Allow auto width */
+    max-width: none; /* Remove max-width constraint */
+    max-height: calc(100vh - 11rem); /* Make it scrollable and fit screen height */
+    overflow-y: auto; /* Enable vertical scrolling */
+    padding: 1rem;
+  }
+
+  .absolute.top-24.left-4.z-10.bg-white\/95 .grid.grid-cols-1.md:grid-cols-3 { /* Filter grid */
+    grid-template-columns: 1fr; /* Stack columns vertically */
+    gap: 1.5rem; /* Adjust gap */
+  }
+
+  .absolute.top-24.left-4.z-10.bg-white\/95 .mt-6.pt-4 { /* Filter bottom section */
+    flex-direction: column; /* Stack clear filters button and text */
+    gap: 1rem;
+    align-items: center; /* Center items */
+    text-align: center; /* Center text */
+  }
+
+  .absolute.top-24.left-4.z-10.bg-white\/95 .mt-6.pt-4 > button {
+    width: 100%; /* Make button full width */
+  }
+
+  /* ReactFlow Overlays */
+  .react-flow__minimap { /* MiniMap */
+    bottom: 1rem !important; /* Adjust position */
+    right: 1rem !important;
+    width: 100px !important; /* Smaller minimap */
+    height: 100px !important;
+  }
+
+  .react-flow__controls { /* Controls (zoom, fit view) */
+    bottom: 1rem !important; /* Adjust position */
+    left: 1rem !important;
+    flex-direction: row !important; /* Keep controls in a row */
+    gap: 0.25rem; /* Reduce gap */
+    width: auto; /* Adjust width */
+  }
+
+  .react-flow__controls button {
+    width: 32px; /* Smaller control buttons */
+    height: 32px;
+  }
+
+  /* No Data Available Message */
+  .absolute.inset-0.flex.flex-col.items-center.justify-center.text-gray-500 {
+    padding: 1rem; /* Add padding to prevent content touching edges */
+    text-align: center;
+  }
+
+  .absolute.inset-0.flex.flex-col.items-center.justify-center.text-gray-500 .w-20.h-20 {
+    width: 5rem; /* Smaller icon */
+    height: 5rem;
+    margin-bottom: 1rem;
+  }
+
+  .absolute.inset-0.flex.flex-col.items-center.justify-center.text-gray-500 h3 {
+    font-size: 1.5rem; /* Smaller heading */
+    margin-bottom: 0.5rem;
+  }
+
+  .absolute.inset-0.flex.flex-col.items-center.justify-center.text-gray-500 p {
+    font-size: 1rem; /* Smaller paragraph */
+    margin-bottom: 1rem;
+  }
+
+  .absolute.inset-0.flex.flex-col.items-center.justify-center.text-gray-500 .flex.gap-3 {
+    flex-direction: column; /* Stack buttons */
+    width: 100%;
+  }
+
+  .absolute.inset-0.flex.flex-col.items-center.justify-center.text-gray-500 .flex.gap-3 > button {
+    width: 100%; /* Make buttons full width */
+  }
+
+  /* Hide Navigation Help on small screens to save space */
+  .absolute.bottom-4.right-4.bg-white\/95 {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Further adjustments for smaller phones */
+  .absolute.top-4.left-4.z-10 .flex.gap-6 { /* Info stats */
+    flex-direction: column; /* Stack info stats vertically */
+    align-items: center;
+    gap: 0.5rem;
+  }
+}
