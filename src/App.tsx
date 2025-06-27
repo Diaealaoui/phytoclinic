@@ -1,4 +1,4 @@
-// App.tsx - Corrected version with UserManagementPage route
+// src/App.tsx - Corrected version with UserManagementPage route and improved logout
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -27,7 +27,7 @@ import CatalogueUploader from './components/CatalogueUploader';
 import CatalogueViewer from './components/CatalogueViewer';
 
 // Import the new UserManagementPage
-import UserManagementPage from './pages/UserManagementPage'; //
+import UserManagementPage from './pages/UserManagementPage';
 
 const queryClient = new QueryClient();
 
@@ -40,7 +40,7 @@ const App = () => {
   // Fetch user profile from your users table
   const fetchUserProfile = async (authUser: any) => {
     if (!authUser?.id) return null;
-    
+
     try {
       const { data: profile, error } = await supabase
         .from("users")
@@ -65,9 +65,9 @@ const App = () => {
     const initializeAuth = async () => {
       try {
         console.log('🔍 Checking authentication...');
-        
+
         const { data: sessionData, error } = await supabase.auth.getSession();
-        
+
         if (error) {
           console.error('❌ Session error:', error);
           setUser(null);
@@ -79,13 +79,13 @@ const App = () => {
 
         const sessionUser = sessionData?.session?.user || null;
         console.log('👤 Session user:', sessionUser?.email);
-        
+
         setUser(sessionUser);
 
         if (sessionUser) {
           // Fetch user profile from your users table
           const profile = await fetchUserProfile(sessionUser);
-          
+
           if (profile) {
             setUserType(profile.user_type);
             setUserName(profile.name);
@@ -110,16 +110,20 @@ const App = () => {
 
   useEffect(() => {
     console.log('🔗 Setting up auth state listener...');
-    
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔄 Auth state changed:', event, session?.user?.email);
-      
+
       if (event === 'SIGNED_OUT' || !session) {
         console.log('👋 User signed out');
         setUser(null);
         setUserType(null);
         setUserName("");
         setChecking(false);
+        // Ensure local storage is cleared on SIGNED_OUT event too
+        localStorage.removeItem('user_email');
+        localStorage.removeItem('user_id');
+        localStorage.removeItem('user_type');
         return;
       }
 
@@ -131,7 +135,7 @@ const App = () => {
         if (sessionUser) {
           // Fetch user profile from your users table
           const profile = await fetchUserProfile(sessionUser);
-          
+
           if (profile) {
             setUserType(profile.user_type);
             setUserName(profile.name);
@@ -154,26 +158,36 @@ const App = () => {
   const handleLogout = async () => {
     try {
       console.log('🚪 Logging out...');
-      
+
       const { error } = await supabase.auth.signOut();
-      
+
       if (error) {
         console.error('Logout error:', error);
+        // Even if there's an error with signOut, attempt to clear client-side data
       }
-      
+
+      // Clear React states
       setUser(null);
       setUserType(null);
       setUserName("");
-      
-      setTimeout(() => {
-        window.location.href = '/login';
-      }, 100);
-      
+
+      // ✅ FIXED: Clear user data from local storage to ensure a clean slate
+      localStorage.removeItem('user_email');
+      localStorage.removeItem('user_id');
+      localStorage.removeItem('user_type');
+
+      // Redirect immediately after clearing state and local storage
+      window.location.href = '/login';
+
     } catch (error) {
       console.error('Logout error:', error);
+      // Ensure states and local storage are cleared even on unexpected errors
       setUser(null);
       setUserType(null);
       setUserName("");
+      localStorage.removeItem('user_email');
+      localStorage.removeItem('user_id');
+      localStorage.removeItem('user_type');
       window.location.href = '/login';
     }
   };
@@ -203,10 +217,10 @@ const App = () => {
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
-              
-              <Route 
-                path="/analytics" 
-                element={isAuthenticated ? <AnalyticsPage /> : <Navigate to="/login" />} 
+
+              <Route
+                path="/analytics"
+                element={isAuthenticated ? <AnalyticsPage /> : <Navigate to="/login" />}
               />
 
               <Route
@@ -254,7 +268,7 @@ const App = () => {
                     <DashboardPage
                       userType={userType!}
                       userEmail={userName}
-                      onLogout={handleLogout}
+                      onLogout={handleLogout} // Pass the corrected handleLogout
                     />
                   </ProtectedRoute>
                 }
@@ -268,7 +282,7 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
-              
+
               <Route
                 path="/forum"
                 element={
@@ -277,7 +291,7 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
-              
+
               <Route
                 path="/csv"
                 element={
@@ -286,7 +300,7 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
-              
+
               <Route
                 path="/zoho"
                 element={
@@ -295,7 +309,7 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
-              
+
               <Route
                 path="/history"
                 element={
