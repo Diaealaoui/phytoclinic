@@ -1,3 +1,4 @@
+// src/components/ClientDashboard.tsx
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,8 @@ interface Props {
 }
 
 const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) => {
+  console.log('ClientDashboard: Component Render Start'); // ADD THIS LOG
+
   const [dashboardData, setDashboardData] = useState({
     totalSpent: 0,
     totalOrders: 0,
@@ -23,35 +26,52 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
   });
 
   useEffect(() => {
+    console.log('ClientDashboard: useEffect triggered'); // ADD THIS LOG
     const fetchDashboardData = async () => {
+      console.log('ClientDashboard: fetchDashboardData started'); // Existing log, but now highlighted
       try {
         console.log('🔍 Fetching dashboard data for:', userEmail);
+        console.log('START: fetchDashboardData');
 
         // 1. Get user name
+        console.log('STEP 1: Fetching user...');
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user?.email) return;
+        if (!user?.email) {
+          setDashboardData(prev => ({ ...prev, loading: false }));
+          console.log('STOP: User not found or no email.');
+          return;
+        }
 
-        const { data: userProfile } = await supabase
+        console.log('STEP 1: Fetching user profile...');
+        const { data: userProfile, error: userProfileError } = await supabase
           .from('users')
           .select('name')
           .eq('email', user.email)
           .single();
 
-        if (!userProfile?.name) return;
+        if (userProfileError || !userProfile?.name) {
+          console.warn('⚠️ Profile not found or error fetching profile:', userProfileError);
+          setDashboardData(prev => ({ ...prev, loading: false, userName: user.email || '' }));
+        }
 
-        const userName = userProfile.name;
+        const userName = userProfile?.name || user.email || '';
         console.log('✅ User name:', userName);
 
         // 2. Get purchase history from facture table
-        const { data: factureData } = await supabase
+        console.log('STEP 2: Fetching facture data...');
+        const { data: factureData, error: factureError } = await supabase
           .from('facture')
           .select('*')
           .eq('Client Name', userName)
           .order('Date', { ascending: false });
 
-        console.log('✅ Facture data:', factureData);
+        if (factureError) {
+          console.error('❌ Error fetching facture data:', factureError);
+        }
+        console.log('✅ Facture data fetched. Items:', factureData ? factureData.length : 0);
 
         // 3. Get forum activity for this user
+        console.log('STEP 3: Fetching forum data...');
         const { data: forumPosts } = await supabase
           .from('forum_posts')
           .select('created_at')
@@ -65,12 +85,21 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
           .eq('author_email', user.email)
           .order('created_at', { ascending: false })
           .limit(1);
+        console.log('✅ Forum data fetched.');
 
         // ✅ NEW: Get catalogues count
-        const { count: cataloguesCount } = await supabase
+        console.log('STEP 4: Fetching catalogues count...');
+        const { count: cataloguesCount, error: cataloguesError } = await supabase
           .from('product_catalogues')
           .select('*', { count: 'exact', head: true });
 
+        if (cataloguesError) {
+          console.error('❌ Error fetching catalogues count:', cataloguesError);
+        }
+        console.log('✅ Catalogues count fetched:', cataloguesCount);
+
+
+        console.log('STEP 5: Starting data processing...');
         // Calculate statistics
         let totalSpent = 0;
         let totalItems = 0;
@@ -79,21 +108,19 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
 
         if (factureData && factureData.length > 0) {
           factureData.forEach((item: any) => {
-            // Calculate total spent
             totalSpent += (item.Quantity || 0) * (item.Price || 0);
-            // Calculate total items - FIXED: Convert to number properly
             const quantity = Number(item.Quantity) || 0;
             totalItems += quantity;
-            // Track unique invoices
             if (item.invoice_id) {
               invoiceGroups.add(item.invoice_id);
             }
-            // Get most recent order date
             if (item.Date && (!recentOrderDate || new Date(item.Date) > new Date(recentOrderDate))) {
               recentOrderDate = item.Date;
             }
           });
         }
+        console.log('STEP 5: Facture data processed.');
+
 
         // Get most recent forum activity
         let recentForumActivity = null;
@@ -107,6 +134,8 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
         } else if (latestReply) {
           recentForumActivity = latestReply;
         }
+        console.log('STEP 5: Forum data processed.');
+
 
         setDashboardData({
           totalSpent,
@@ -119,44 +148,39 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
           loading: false
         });
 
-        console.log('✅ Dashboard data calculated:', {
-          totalSpent,
-          totalOrders: invoiceGroups.size,
-          totalItems,
-          recentOrderDate,
-          recentForumActivity,
-          cataloguesCount
-        });
+        console.log('✅ Dashboard data calculated and state updated.');
+        console.log('END: fetchDashboardData');
 
       } catch (error) {
-        console.error('❌ Error fetching dashboard data:', error);
+        console.error('❌ Error fetching or processing dashboard data:', error);
         setDashboardData(prev => ({ ...prev, loading: false }));
+        console.log('END (with error): fetchDashboardData');
       }
     };
 
     fetchDashboardData();
   }, [userEmail]);
 
-  // ✅ UPDATED: Added catalogues section
+  console.log('ClientDashboard: Component Render End'); // ADD THIS LOG
+
   const sections = [
-    { 
-      id: 'history', 
-      title: 'Purchase History', 
-      icon: Users, 
-      desc: 'View your invoice records and order details' 
+    {
+      id: 'history',
+      title: 'Purchase History',
+      icon: Users,
+      desc: 'View your invoice records and order details'
     },
-    { 
-      id: 'forum', 
-      title: 'Q&A Forum', 
-      icon: MessageSquare, 
-      desc: 'Ask questions and get support from our community' 
+    {
+      id: 'forum',
+      title: 'Q&A Forum',
+      icon: MessageSquare,
+      desc: 'Ask questions and get support from our community'
     },
-    // ✅ NEW: Product Catalogues section for clients
-    { 
-      id: 'catalogues', 
-      title: 'Product Catalogues', 
-      icon: BookOpen, 
-      desc: 'Browse our complete product collection and specifications' 
+    {
+      id: 'catalogues',
+      title: 'Product Catalogues',
+      icon: BookOpen,
+      desc: 'Browse our complete product collection and specifications'
     }
   ];
 
@@ -170,7 +194,7 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 1) return 'Yesterday';
     if (diffDays <= 7) return `${diffDays} days ago`;
     return date.toLocaleDateString();
@@ -178,14 +202,12 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-teal-50">
-      {/* Mobile-First Container */}
       <div className="container mx-auto px-4 py-4 sm:px-6 sm:py-6">
-        {/* Mobile Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            <img 
-              src="https://d64gsuwffb70l.cloudfront.net/6848c10115c1e7aea64f3606_1749599147143_6f59f594.jpg" 
-              alt="Phytoclinic Logo" 
+            <img
+              src="https://d64gsuwffb70l.cloudfront.net/6848c10115c1e7aea64f3606_1749599147143_6f59f594.jpg"
+              alt="Phytoclinic Logo"
               className="h-12 sm:h-16 w-auto object-contain flex-shrink-0"
             />
             <div className="min-w-0 flex-1">
@@ -196,9 +218,9 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
               </p>
             </div>
           </div>
-          <Button 
-            onClick={onLogout} 
-            variant="outline" 
+          <Button
+            onClick={onLogout}
+            variant="outline"
             className="text-green-700 border-green-200 w-full sm:w-auto"
             size="sm"
           >
@@ -207,7 +229,6 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
           </Button>
         </div>
 
-        {/* Mobile-Optimized Statistics Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6">
           <Card className="bg-white/80 backdrop-blur-sm hover:shadow-lg transition-shadow">
             <CardContent className="pt-4 pb-4">
@@ -251,7 +272,6 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
             </CardContent>
           </Card>
 
-          {/* ✅ NEW: Catalogues count card */}
           <Card className="bg-white/80 backdrop-blur-sm hover:shadow-lg transition-shadow">
             <CardContent className="pt-4 pb-4">
               <div className="text-center sm:flex sm:items-center sm:text-left">
@@ -267,9 +287,6 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
           </Card>
         </div>
 
-
-
-        {/* Mobile-Optimized Main Navigation */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {sections.map(({ id, icon: Icon, title, desc }) => (
             <Card
@@ -292,35 +309,33 @@ const ClientDashboard: React.FC<Props> = ({ userEmail, onLogout, onNavigate }) =
           ))}
         </div>
 
-        {/* Mobile Quick Actions - Updated */}
         <div className="mt-6 sm:hidden">
           <Card className="bg-gradient-to-r from-green-500 to-teal-500 text-white">
             <CardContent className="pt-4 pb-4">
               <div className="text-center">
                 <h3 className="font-semibold mb-2">Quick Access</h3>
                 <div className="grid grid-cols-3 gap-2">
-                  <Button 
-                    onClick={() => onNavigate('history')} 
-                    variant="outline" 
+                  <Button
+                    onClick={() => onNavigate('history')}
+                    variant="outline"
                     className="text-green-700 bg-white/90 border-white/50 hover:bg-white text-xs p-2"
                     size="sm"
                   >
                     <Package className="w-3 h-3 mb-1" />
                     Orders
                   </Button>
-                  <Button 
-                    onClick={() => onNavigate('forum')} 
-                    variant="outline" 
+                  <Button
+                    onClick={() => onNavigate('forum')}
+                    variant="outline"
                     className="text-green-700 bg-white/90 border-white/50 hover:bg-white text-xs p-2"
                     size="sm"
                   >
                     <MessageSquare className="w-3 h-3 mb-1" />
                     Forum
                   </Button>
-                  {/* ✅ NEW: Quick access to catalogues */}
-                  <Button 
-                    onClick={() => onNavigate('catalogues')} 
-                    variant="outline" 
+                  <Button
+                    onClick={() => onNavigate('catalogues')}
+                    variant="outline"
                     className="text-green-700 bg-white/90 border-white/50 hover:bg-white text-xs p-2"
                     size="sm"
                   >
