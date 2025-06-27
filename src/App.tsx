@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } => "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { supabase } from "@/lib/supabase";
@@ -39,102 +39,122 @@ const App = () => {
 
   // Fetch user profile from your users table
   const fetchUserProfile = async (authUser: any) => {
-    console.log('App: Entering fetchUserProfile for userId:', authUser?.id); // NEW LOG
+    console.log('App: Entering fetchUserProfile for userId:', authUser?.id);
     if (!authUser?.id) {
-      console.warn('App: fetchUserProfile - No authUser ID provided, returning null profile.'); // NEW LOG
+      console.warn('App: fetchUserProfile - No authUser ID provided, returning null profile.');
       return null;
     }
 
+    const SUPABASE_QUERY_TIMEOUT = 10000; // Define a timeout duration (e.g., 10 seconds)
+
     try {
-      console.log('App: Querying "users" table for profile...'); // NEW LOG
-      const { data: profile, error } = await supabase
+      console.log('App: Querying "users" table for profile (with timeout)...');
+      // Create a promise for the Supabase query
+      const profilePromise = supabase
         .from("users")
         .select("id, email, name, user_type")
         .eq("id", authUser.id)
         .single();
 
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Supabase profile query timed out')), SUPABASE_QUERY_TIMEOUT)
+      );
+
+      // Race the Supabase query against the timeout
+      const result = await Promise.race([profilePromise, timeoutPromise]);
+
+      // If the timeout wins, result will be an Error object
+      if (result instanceof Error) {
+        throw result; // Propagate the timeout error
+      }
+
+      // If Supabase query wins, it will be an object with data and error properties
+      const { data: profile, error } = result;
+
       if (error) {
-        // If profile not found, it's not always an error, but a "null" result
-        if (error.code === 'PGRST116' && error.details === 'The result contains 0 rows') { // RLS no rows found error
-            console.warn('⚠️ App: User profile not found in "users" table, or RLS denied access:', error.message); // MODIFIED LOG
+        if (error.code === 'PGRST116' && error.details === 'The result contains 0 rows') {
+            console.warn('⚠️ App: User profile not found in "users" table, or RLS denied access:', error.message);
         } else {
-            console.error('❌ App: Supabase error fetching user profile:', error); // MODIFIED LOG
+            console.error('❌ App: Supabase error fetching user profile:', error);
         }
         return null;
       }
 
-      console.log('✅ App: User profile loaded:', profile); // MODIFIED LOG
+      console.log('✅ App: User profile loaded:', profile);
       return profile;
-    } catch (error) {
-      console.error('❌ App: Unexpected error in fetchUserProfile catch block:', error); // MODIFIED LOG
+    } catch (error: any) { // Type 'any' for the error object for flexibility
+      console.error('❌ App: Error in fetchUserProfile catch block:', error.message || error);
+      if (error.message === 'Supabase profile query timed out') {
+        console.error('App: Supabase profile query exceeded timeout of', SUPABASE_QUERY_TIMEOUT, 'ms. This might indicate a slow database response or RLS issue.');
+      }
       return null;
     } finally {
-      console.log('App: Exiting fetchUserProfile.'); // NEW LOG
+      console.log('App: Exiting fetchUserProfile.');
     }
   };
 
   useEffect(() => {
     const initializeAuth = async () => {
-      console.log('🔍 App: initializeAuth started. Checking session...'); // MODIFIED LOG
+      console.log('🔍 App: initializeAuth started. Checking session...');
       try {
         const { data: sessionData, error } = await supabase.auth.getSession();
-        console.log('App: supabase.auth.getSession() completed.'); // NEW LOG
+        console.log('App: supabase.auth.getSession() completed.');
 
         if (error) {
-          console.error('❌ App: Session error from getSession:', error); // MODIFIED LOG
+          console.error('❌ App: Session error from getSession:', error);
           setUser(null);
           setUserType(null);
           setUserName("");
-          console.log('App: getSession error path, setting checking to false.'); // NEW LOG
+          console.log('App: getSession error path, setting checking to false.');
           setChecking(false);
           return;
         }
 
         const sessionUser = sessionData?.session?.user || null;
-        console.log('👤 App: Session user from getSession:', sessionUser?.email || 'No user'); // MODIFIED LOG
+        console.log('👤 App: Session user from getSession:', sessionUser?.email || 'No user');
 
         setUser(sessionUser);
 
         if (sessionUser) {
-          console.log('App: User found in session, fetching profile...'); // NEW LOG
-          const profile = await fetchUserProfile(sessionUser); // Call the instrumented version
+          console.log('App: User found in session, fetching profile...');
+          const profile = await fetchUserProfile(sessionUser);
 
           if (profile) {
             setUserType(profile.user_type);
             setUserName(profile.name);
-            console.log('App: Profile found and set.'); // NEW LOG
+            console.log('App: Profile found and set.');
           } else {
-            // Fallback if profile not found (e.g., new signup not yet in public.users)
             setUserType("client");
             setUserName(sessionUser.email || 'User');
-            console.log('App: Profile NOT found, falling back to client type.'); // NEW LOG
+            console.log('App: Profile NOT found, falling back to client type.');
           }
         } else {
-            console.log('App: No user in session from getSession.'); // NEW LOG
+            console.log('App: No user in session from getSession.');
         }
       } catch (error) {
-        console.error('❌ App: Auth initialization error (catch block):', error); // MODIFIED LOG
+        console.error('❌ App: Auth initialization error (catch block):', error);
         setUser(null);
         setUserType(null);
         setUserName("");
       } finally {
-        console.log('App: initializeAuth finished, setting checking to false.'); // NEW LOG
+        console.log('App: initializeAuth finished, setting checking to false.');
         setChecking(false);
       }
     };
 
     initializeAuth();
-  }, []); // Runs once on mount
+  }, []);
 
   useEffect(() => {
-    console.log('🔗 App: Setting up auth state listener...'); // MODIFIED LOG
+    console.log('🔗 App: Setting up auth state listener...');
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔄 App: Auth state changed:', event, session?.user?.email || 'No user'); // MODIFIED LOG
-      console.log('App: Auth state listener triggered.'); // NEW LOG
+      console.log('🔄 App: Auth state changed:', event, session?.user?.email || 'No user');
+      console.log('App: Auth state listener triggered.');
 
       if (event === 'SIGNED_OUT' || !session) {
-        console.log('👋 App: Auth listener - User signed out or no session.'); // MODIFIED LOG
+        console.log('👋 App: Auth listener - User signed out or no session.');
         setUser(null);
         setUserType(null);
         setUserName("");
@@ -146,32 +166,32 @@ const App = () => {
       }
 
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || session) {
-        console.log('👤 App: Auth listener - Processing signed in user...'); // MODIFIED LOG
+        console.log('👤 App: Auth listener - Processing signed in user...');
         const sessionUser = session?.user || null;
         setUser(sessionUser);
 
         if (sessionUser) {
-          console.log('App: Auth listener - User found, fetching profile...'); // NEW LOG
-          const profile = await fetchUserProfile(sessionUser); // Call the instrumented version
+          console.log('App: Auth listener - User found, fetching profile...');
+          const profile = await fetchUserProfile(sessionUser);
           if (profile) {
             setUserType(profile.user_type);
             setUserName(profile.name);
-            console.log('App: Auth listener - Profile found and set.'); // NEW LOG
+            console.log('App: Auth listener - Profile found and set.');
           } else {
             setUserType("client");
             setUserName(sessionUser.email || 'User');
-            console.log('App: Auth listener - Profile NOT found, falling back to client type.'); // NEW LOG
+            console.log('App: Auth listener - Profile NOT found, falling back to client type.');
           }
         } else {
-            console.log('App: Auth listener - No user in session.'); // NEW LOG
+            console.log('App: Auth listener - No user in session.');
         }
-        console.log('App: Auth listener processing finished, setting checking to false.'); // MODIFIED LOG
+        console.log('App: Auth listener processing finished, setting checking to false.');
         setChecking(false);
       }
     });
 
     return () => {
-      console.log('🔌 App: Cleaning up auth listener subscription.'); // MODIFIED LOG
+      console.log('🔌 App: Cleaning up auth listener subscription.');
       subscription.unsubscribe();
     };
   }, []);
@@ -194,7 +214,6 @@ const App = () => {
       localStorage.removeItem('user_id');
       localStorage.removeItem('user_type');
 
-      // Using setTimeout just to ensure logs are flushed, though usually not needed
       setTimeout(() => {
         window.location.href = '/login';
       }, 100);
@@ -212,7 +231,7 @@ const App = () => {
   };
 
   if (checking) {
-    console.log('App: Render - Showing loading state...'); // NEW LOG
+    console.log('App: Render - Showing loading state...');
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -223,7 +242,7 @@ const App = () => {
       </div>
     );
   }
-  console.log('App: Render - Checking complete, isAuthenticated:', !!user); // NEW LOG
+  console.log('App: Render - Checking complete, isAuthenticated:', !!user);
   const isAuthenticated = !!user && !!userType && !checking;
 
   return (
