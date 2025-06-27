@@ -1,8 +1,6 @@
-// App.tsx - Corrected version with React Router's useNavigate for logout
-
+// App.tsx - Corrected version with UserManagementPage route
 import { useEffect, useState } from "react";
-// Import useNavigate from react-router-dom
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom"; // ADD useNavigate
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
@@ -24,9 +22,12 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import SyncManagerPage from './pages/SyncManagerPage';
 import ProtectedRoute from "./components/ProtectedRoute";
 
+// Import catalogue components directly since we don't have separate page files yet
 import CatalogueUploader from './components/CatalogueUploader';
 import CatalogueViewer from './components/CatalogueViewer';
-import UserManagementPage from './pages/UserManagementPage';
+
+// Import the new UserManagementPage
+import UserManagementPage from './pages/UserManagementPage'; //
 
 const queryClient = new QueryClient();
 
@@ -36,9 +37,7 @@ const App = () => {
   const [userType, setUserType] = useState<'admin' | 'client' | null>(null);
   const [userName, setUserName] = useState<string>("");
 
-  // Initialize useNavigate hook here
-  const navigate = useNavigate(); // Initialize useNavigate here
-
+  // Fetch user profile from your users table
   const fetchUserProfile = async (authUser: any) => {
     if (!authUser?.id) return null;
     
@@ -84,12 +83,14 @@ const App = () => {
         setUser(sessionUser);
 
         if (sessionUser) {
+          // Fetch user profile from your users table
           const profile = await fetchUserProfile(sessionUser);
           
           if (profile) {
             setUserType(profile.user_type);
             setUserName(profile.name);
           } else {
+            // Fallback to default values
             setUserType("client");
             setUserName(sessionUser.email || 'User');
           }
@@ -119,9 +120,6 @@ const App = () => {
         setUserType(null);
         setUserName("");
         setChecking(false);
-        // Use navigate for client-side redirect after sign out
-        // No need for setTimeout or window.location.href here
-        navigate('/login'); 
         return;
       }
 
@@ -131,12 +129,14 @@ const App = () => {
         setUser(sessionUser);
 
         if (sessionUser) {
+          // Fetch user profile from your users table
           const profile = await fetchUserProfile(sessionUser);
           
           if (profile) {
             setUserType(profile.user_type);
             setUserName(profile.name);
           } else {
+            // Fallback to default values
             setUserType("client");
             setUserName(sessionUser.email || 'User');
           }
@@ -149,7 +149,7 @@ const App = () => {
       console.log('🔌 Cleaning up auth listener');
       subscription.unsubscribe();
     };
-  }, [navigate]); // Add navigate to dependency array
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -159,22 +159,22 @@ const App = () => {
       
       if (error) {
         console.error('Logout error:', error);
-        // Even on error, attempt to clear state and navigate
       }
       
       setUser(null);
       setUserType(null);
       setUserName("");
       
-      // Use navigate for client-side redirect
-      navigate('/login'); 
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 100);
       
     } catch (error) {
       console.error('Logout error:', error);
       setUser(null);
       setUserType(null);
       setUserName("");
-      navigate('/login'); 
+      window.location.href = '/login';
     }
   };
 
@@ -198,131 +198,119 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          {/* BrowserRouter must wrap the component where useNavigate is used */}
-          {/* So, we move <BrowserRouter> inside, wrapping the main App logic */}
           <BrowserRouter>
-            <AppContent
-              isAuthenticated={isAuthenticated}
-              userType={userType}
-              userName={userName}
-              handleLogout={handleLogout}
-            />
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              
+              <Route 
+                path="/analytics" 
+                element={isAuthenticated ? <AnalyticsPage /> : <Navigate to="/login" />} 
+              />
+
+              <Route
+                path="/sync-manager"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <SyncManagerPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Catalogue routes using components directly */}
+              <Route
+                path="/catalogue-upload"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <CatalogueUploader />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/catalogues"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <CatalogueViewer userType={userType || 'client'} />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* New Route for User Management Page */}
+              <Route
+                path="/users" // This is the path for User Management
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <UserManagementPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <DashboardPage
+                      userType={userType!}
+                      userEmail={userName}
+                      onLogout={handleLogout}
+                    />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/mindmap"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <MindMapPage />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/forum"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <ForumPage />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/csv"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <CsvUploaderPage />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/zoho"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <ZohoPage />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/history"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <PurchaseHistoryPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route path="*" element={<NotFound />} />
+            </Routes>
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>
-  );
-};
-
-// Create a new component to house the Routes, so useNavigate can be used inside AppContent
-const AppContent = ({ isAuthenticated, userType, userName, handleLogout }) => {
-  return (
-    <Routes>
-      <Route path="/" element={<Index />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      
-      <Route 
-        path="/analytics" 
-        element={isAuthenticated ? <AnalyticsPage /> : <Navigate to="/login" />} 
-      />
-
-      <Route
-        path="/sync-manager"
-        element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <SyncManagerPage />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/catalogue-upload"
-        element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <CatalogueUploader />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/catalogues"
-        element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <CatalogueViewer userType={userType || 'client'} />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/users"
-        element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <UserManagementPage />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <DashboardPage
-              userType={userType!}
-              userEmail={userName}
-              onLogout={handleLogout}
-            />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/mindmap"
-        element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <MindMapPage />
-          </ProtectedRoute>
-        }
-      />
-      
-      <Route
-        path="/forum"
-        element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <ForumPage />
-          </ProtectedRoute>
-        }
-      />
-      
-      <Route
-        path="/csv"
-        element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <CsvUploaderPage />
-          </ProtectedRoute>
-        }
-      />
-      
-      <Route
-        path="/zoho"
-        element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <ZohoPage />
-          </ProtectedRoute>
-        }
-      />
-      
-      <Route
-        path="/history"
-        element={
-          <ProtectedRoute isAuthenticated={isAuthenticated}>
-            <PurchaseHistoryPage />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route path="*" element={<NotFound />} />
-    </Routes>
   );
 };
 
