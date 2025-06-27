@@ -1,4 +1,4 @@
-// src/App.tsx - Corrected version with UserManagementPage route and improved logout
+// src/App.tsx - Corrected version with UserManagementPage route and improved logout, and extensive logging for debugging stuck on refresh
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -39,9 +39,14 @@ const App = () => {
 
   // Fetch user profile from your users table
   const fetchUserProfile = async (authUser: any) => {
-    if (!authUser?.id) return null;
+    console.log('App: Entering fetchUserProfile for userId:', authUser?.id); // NEW LOG
+    if (!authUser?.id) {
+      console.warn('App: fetchUserProfile - No authUser ID provided, returning null profile.'); // NEW LOG
+      return null;
+    }
 
     try {
+      console.log('App: Querying "users" table for profile...'); // NEW LOG
       const { data: profile, error } = await supabase
         .from("users")
         .select("id, email, name, user_type")
@@ -49,78 +54,91 @@ const App = () => {
         .single();
 
       if (error) {
-        console.warn('⚠️ Could not fetch user profile:', error);
+        // If profile not found, it's not always an error, but a "null" result
+        if (error.code === 'PGRST116' && error.details === 'The result contains 0 rows') { // RLS no rows found error
+            console.warn('⚠️ App: User profile not found in "users" table, or RLS denied access:', error.message); // MODIFIED LOG
+        } else {
+            console.error('❌ App: Supabase error fetching user profile:', error); // MODIFIED LOG
+        }
         return null;
       }
 
-      console.log('✅ User profile loaded:', profile);
+      console.log('✅ App: User profile loaded:', profile); // MODIFIED LOG
       return profile;
     } catch (error) {
-      console.error('❌ Profile fetch error:', error);
+      console.error('❌ App: Unexpected error in fetchUserProfile catch block:', error); // MODIFIED LOG
       return null;
+    } finally {
+      console.log('App: Exiting fetchUserProfile.'); // NEW LOG
     }
   };
 
   useEffect(() => {
     const initializeAuth = async () => {
+      console.log('🔍 App: initializeAuth started. Checking session...'); // MODIFIED LOG
       try {
-        console.log('🔍 Checking authentication...');
-
         const { data: sessionData, error } = await supabase.auth.getSession();
+        console.log('App: supabase.auth.getSession() completed.'); // NEW LOG
 
         if (error) {
-          console.error('❌ Session error:', error);
+          console.error('❌ App: Session error from getSession:', error); // MODIFIED LOG
           setUser(null);
           setUserType(null);
           setUserName("");
+          console.log('App: getSession error path, setting checking to false.'); // NEW LOG
           setChecking(false);
           return;
         }
 
         const sessionUser = sessionData?.session?.user || null;
-        console.log('👤 Session user:', sessionUser?.email);
+        console.log('👤 App: Session user from getSession:', sessionUser?.email || 'No user'); // MODIFIED LOG
 
         setUser(sessionUser);
 
         if (sessionUser) {
-          // Fetch user profile from your users table
-          const profile = await fetchUserProfile(sessionUser);
+          console.log('App: User found in session, fetching profile...'); // NEW LOG
+          const profile = await fetchUserProfile(sessionUser); // Call the instrumented version
 
           if (profile) {
             setUserType(profile.user_type);
             setUserName(profile.name);
+            console.log('App: Profile found and set.'); // NEW LOG
           } else {
-            // Fallback to default values
+            // Fallback if profile not found (e.g., new signup not yet in public.users)
             setUserType("client");
             setUserName(sessionUser.email || 'User');
+            console.log('App: Profile NOT found, falling back to client type.'); // NEW LOG
           }
+        } else {
+            console.log('App: No user in session from getSession.'); // NEW LOG
         }
       } catch (error) {
-        console.error('❌ Auth initialization error:', error);
+        console.error('❌ App: Auth initialization error (catch block):', error); // MODIFIED LOG
         setUser(null);
         setUserType(null);
         setUserName("");
       } finally {
+        console.log('App: initializeAuth finished, setting checking to false.'); // NEW LOG
         setChecking(false);
       }
     };
 
     initializeAuth();
-  }, []);
+  }, []); // Runs once on mount
 
   useEffect(() => {
-    console.log('🔗 Setting up auth state listener...');
+    console.log('🔗 App: Setting up auth state listener...'); // MODIFIED LOG
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔄 Auth state changed:', event, session?.user?.email);
+      console.log('🔄 App: Auth state changed:', event, session?.user?.email || 'No user'); // MODIFIED LOG
+      console.log('App: Auth state listener triggered.'); // NEW LOG
 
       if (event === 'SIGNED_OUT' || !session) {
-        console.log('👋 User signed out');
+        console.log('👋 App: Auth listener - User signed out or no session.'); // MODIFIED LOG
         setUser(null);
         setUserType(null);
         setUserName("");
         setChecking(false);
-        // Ensure local storage is cleared on SIGNED_OUT event too
         localStorage.removeItem('user_email');
         localStorage.removeItem('user_id');
         localStorage.removeItem('user_type');
@@ -128,60 +146,61 @@ const App = () => {
       }
 
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || session) {
-        console.log('👤 Processing signed in user...');
+        console.log('👤 App: Auth listener - Processing signed in user...'); // MODIFIED LOG
         const sessionUser = session?.user || null;
         setUser(sessionUser);
 
         if (sessionUser) {
-          // Fetch user profile from your users table
-          const profile = await fetchUserProfile(sessionUser);
-
+          console.log('App: Auth listener - User found, fetching profile...'); // NEW LOG
+          const profile = await fetchUserProfile(sessionUser); // Call the instrumented version
           if (profile) {
             setUserType(profile.user_type);
             setUserName(profile.name);
+            console.log('App: Auth listener - Profile found and set.'); // NEW LOG
           } else {
-            // Fallback to default values
             setUserType("client");
             setUserName(sessionUser.email || 'User');
+            console.log('App: Auth listener - Profile NOT found, falling back to client type.'); // NEW LOG
           }
+        } else {
+            console.log('App: Auth listener - No user in session.'); // NEW LOG
         }
+        console.log('App: Auth listener processing finished, setting checking to false.'); // MODIFIED LOG
         setChecking(false);
       }
     });
 
     return () => {
-      console.log('🔌 Cleaning up auth listener');
+      console.log('🔌 App: Cleaning up auth listener subscription.'); // MODIFIED LOG
       subscription.unsubscribe();
     };
   }, []);
 
   const handleLogout = async () => {
     try {
-      console.log('🚪 Logging out...');
+      console.log('🚪 App: Logging out...');
 
       const { error } = await supabase.auth.signOut();
 
       if (error) {
         console.error('Logout error:', error);
-        // Even if there's an error with signOut, attempt to clear client-side data
       }
 
-      // Clear React states
       setUser(null);
       setUserType(null);
       setUserName("");
 
-      // ✅ FIXED: Clear user data from local storage to ensure a clean slate
       localStorage.removeItem('user_email');
       localStorage.removeItem('user_id');
       localStorage.removeItem('user_type');
 
-      // Redirect immediately after clearing state and local storage
-      window.location.href = '/login';
+      // Using setTimeout just to ensure logs are flushed, though usually not needed
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 100);
 
     } catch (error) {
       console.error('Logout error:', error);
-      // Ensure states and local storage are cleared even on unexpected errors
       setUser(null);
       setUserType(null);
       setUserName("");
@@ -193,6 +212,7 @@ const App = () => {
   };
 
   if (checking) {
+    console.log('App: Render - Showing loading state...'); // NEW LOG
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -203,7 +223,7 @@ const App = () => {
       </div>
     );
   }
-
+  console.log('App: Render - Checking complete, isAuthenticated:', !!user); // NEW LOG
   const isAuthenticated = !!user && !!userType && !checking;
 
   return (
@@ -253,7 +273,7 @@ const App = () => {
 
               {/* New Route for User Management Page */}
               <Route
-                path="/users" // This is the path for User Management
+                path="/users"
                 element={
                   <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <UserManagementPage />
@@ -268,7 +288,7 @@ const App = () => {
                     <DashboardPage
                       userType={userType!}
                       userEmail={userName}
-                      onLogout={handleLogout} // Pass the corrected handleLogout
+                      onLogout={handleLogout}
                     />
                   </ProtectedRoute>
                 }
