@@ -1,17 +1,16 @@
 // src/components/ProtectedRoute.tsx
 import { Navigate } from 'react-router-dom';
-import React from 'react'; // Make sure React is imported
+import React from 'react';
 
 interface ProtectedRouteProps {
   isAuthenticated: boolean;
-  isCheckingAuth: boolean; // NEW PROP: Indicate if auth check is still ongoing
+  isCheckingAuth: boolean; // Indicate if auth check is still ongoing
   children: React.ReactNode;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ isAuthenticated, isCheckingAuth, children }) => {
   if (isCheckingAuth) {
     // If we are still checking authentication, display a loading state
-    // This prevents premature redirects while userType is being determined
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
