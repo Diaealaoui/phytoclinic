@@ -1,4 +1,4 @@
-// src/App.tsx - Corrected version with UserManagementPage route and improved logout, and extensive logging for debugging stuck on refresh
+// src/App.tsx - Fully updated version with all debugging logs and fixes
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -99,7 +99,8 @@ const App = () => {
       console.log('🔍 App: initializeAuth started. Checking session...');
       try {
         const { data: sessionData, error } = await supabase.auth.getSession();
-        console.log('App: supabase.auth.getSession() completed.');
+        // **ADD THIS LOG:** Check what getSession returns immediately on load
+        console.log('⚡️ App: supabase.auth.getSession() result on load:', sessionData, 'Error:', error);
 
         if (error) {
           console.error('❌ App: Session error from getSession:', error);
@@ -149,7 +150,7 @@ const App = () => {
     };
 
     initializeAuth();
-  }, []);
+  }, []); // Runs once on mount
 
   useEffect(() => {
     console.log('🔗 App: Setting up auth state listener...');
