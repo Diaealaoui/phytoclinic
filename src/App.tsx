@@ -1,5 +1,5 @@
 // src/App.tsx - Refined approach using single onAuthStateChange for initial state and all updates
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react"; // Import useRef
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -33,6 +33,9 @@ const App = () => {
   const [checking, setChecking] = useState(true); // Start as true, set to false once initial auth state is determined
   const [userType, setUserType] = useState<'admin' | 'client' | null>(null);
   const [userName, setUserName] = useState<string>("");
+
+  // Use useRef to track if the initial onAuthStateChange event has been fully processed
+  const initialEventProcessedRef = useRef(false);
 
   // fetchUserProfile function remains the same (it's already robust and logs well)
   const fetchUserProfile = async (authUser: any) => {
@@ -73,9 +76,7 @@ const App = () => {
 
   useEffect(() => {
     let isMounted = true; // Flag to prevent state updates on unmounted component
-    let initialEventProcessed = false; // Flag to ensure setChecking(false) runs only once for initial state
 
-    // This listener will be the SINGLE source of truth for session management
     console.log('🔗 App: Setting up auth state listener...');
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return; // Guard against unmount during async op
@@ -122,10 +123,10 @@ const App = () => {
 
       // Crucially, set checking to false only AFTER the first comprehensive auth state has been handled.
       // This ensures isAuthenticated is stable before routing decisions are made.
-      if (!initialEventProcessed && isMounted) {
+      if (!initialEventProcessedRef.current && isMounted) { // Use ref here
         console.log('App: Initial authentication state processed. Setting checking to false.');
         setChecking(false);
-        initialEventProcessed = true; // Mark as handled
+        initialEventProcessedRef.current = true; // Mark as handled
       }
     });
 
