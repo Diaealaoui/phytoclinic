@@ -104,7 +104,7 @@ const App = () => {
         if (error) {
           console.error('❌ App: Session error from getSession:', error);
           setUser(null);
-          setUserType(null);
+          setUserType(null); // Keep userType null on session error
           setUserName("");
           console.log('App: getSession error path, setting checking to false.');
           setChecking(false);
@@ -125,17 +125,22 @@ const App = () => {
             setUserName(profile.name);
             console.log('App: Profile found and set.');
           } else {
-            setUserType("client");
-            setUserName(sessionUser.email || 'User');
-            console.log('App: Profile NOT found, falling back to client type.');
+            // ✅ IMPORTANT CHANGE: If profile fetch fails/times out, DO NOT default userType to "client".
+            // Instead, set userType to null. This will make ProtectedRoute redirect to login,
+            // which is safer than misassigning roles.
+            setUserType(null); // Set to null to trigger ProtectedRoute redirect
+            setUserName(sessionUser.email || 'User'); // Still use email for display if needed
+            console.warn('App: Profile fetch failed/timed out. UserType NOT set. Will redirect to login via ProtectedRoute.');
           }
         } else {
+            // If no session user, ensure userType is null
+            setUserType(null);
             console.log('App: No user in session from getSession.');
         }
       } catch (error) {
         console.error('❌ App: Auth initialization error (catch block):', error);
         setUser(null);
-        setUserType(null);
+        setUserType(null); // Ensure userType is null on unexpected error
         setUserName("");
       } finally {
         console.log('App: initializeAuth finished, setting checking to false.');
@@ -156,7 +161,7 @@ const App = () => {
       if (event === 'SIGNED_OUT' || !session) {
         console.log('👋 App: Auth listener - User signed out or no session.');
         setUser(null);
-        setUserType(null);
+        setUserType(null); // Ensure userType is null on sign out
         setUserName("");
         setChecking(false);
         localStorage.removeItem('user_email');
@@ -178,11 +183,15 @@ const App = () => {
             setUserName(profile.name);
             console.log('App: Auth listener - Profile found and set.');
           } else {
-            setUserType("client");
+            // ✅ IMPORTANT CHANGE: If profile fetch fails/times out, DO NOT default userType to "client".
+            // Set userType to null to trigger ProtectedRoute redirect.
+            setUserType(null); // Set to null to trigger ProtectedRoute redirect
             setUserName(sessionUser.email || 'User');
-            console.log('App: Auth listener - Profile NOT found, falling back to client type.');
+            console.warn('App: Auth listener - Profile fetch failed/timed out. UserType NOT set. Will redirect to login via ProtectedRoute.');
           }
         } else {
+            // If no session user, ensure userType is null
+            setUserType(null);
             console.log('App: Auth listener - No user in session.');
         }
         console.log('App: Auth listener processing finished, setting checking to false.');
@@ -242,8 +251,9 @@ const App = () => {
       </div>
     );
   }
-  console.log('App: Render - Checking complete, isAuthenticated:', !!user);
-  const isAuthenticated = !!user && !!userType && !checking;
+  // This `isAuthenticated` check now correctly relies on userType being determined
+  console.log('App: Render - Checking complete, isAuthenticated:', !!user, 'UserType:', userType);
+  const isAuthenticated = !!user && !!userType && !checking; // userType must be not null for auth
 
   return (
     <ThemeProvider defaultTheme="light">
@@ -285,6 +295,8 @@ const App = () => {
                 path="/catalogues"
                 element={
                   <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    {/* Pass the resolved userType or default to 'client' if not determined,
+                        though ideally userType would be null and ProtectedRoute handles redirection */}
                     <CatalogueViewer userType={userType || 'client'} />
                   </ProtectedRoute>
                 }
@@ -305,7 +317,7 @@ const App = () => {
                 element={
                   <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <DashboardPage
-                      userType={userType!}
+                      userType={userType!} // userType is guaranteed by isAuthenticated check
                       userEmail={userName}
                       onLogout={handleLogout}
                     />
