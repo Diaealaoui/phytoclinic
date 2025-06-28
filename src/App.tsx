@@ -1,4 +1,5 @@
-// src/App.tsx - Fully updated version with all debugging logs and fixes
+// src/App.tsx - Fully updated version with all debugging logs and fixes,
+// specifically addressing race condition on refresh for userType and checking state.
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -95,116 +96,93 @@ const App = () => {
   };
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      console.log('🔍 App: initializeAuth started. Checking session...');
-      try {
-        const { data: sessionData, error } = await supabase.auth.getSession();
-        // **ADD THIS LOG:** Check what getSession returns immediately on load
-        console.log('⚡️ App: supabase.auth.getSession() result on load:', sessionData, 'Error:', error);
+    let isMounted = true; // Flag to prevent state updates on unmounted component
 
-        if (error) {
-          console.error('❌ App: Session error from getSession:', error);
-          setUser(null);
-          setUserType(null); // Keep userType null on session error
-          setUserName("");
-          console.log('App: getSession error path, setting checking to false.');
-          setChecking(false);
-          return;
-        }
-
-        const sessionUser = sessionData?.session?.user || null;
-        console.log('👤 App: Session user from getSession:', sessionUser?.email || 'No user');
-
-        setUser(sessionUser);
+    // Consolidated function to process a session and update all relevant states
+    const processSessionAndSetStatus = async (sessionUser: any) => {
+        if (!isMounted) return; // Prevent updates if component unmounted during async operation
 
         if (sessionUser) {
-          console.log('App: User found in session, fetching profile...');
-          const profile = await fetchUserProfile(sessionUser);
+            console.log('App: processSessionAndSetStatus - User found, fetching profile...');
+            const profile = await fetchUserProfile(sessionUser); // Fetch profile
 
-          if (profile) {
-            setUserType(profile.user_type);
-            setUserName(profile.name);
-            console.log('App: Profile found and set.');
-          } else {
-            // ✅ IMPORTANT CHANGE: If profile fetch fails/times out, DO NOT default userType to "client".
-            // Instead, set userType to null. This will make ProtectedRoute redirect to login,
-            // which is safer than misassigning roles.
-            setUserType(null); // Set to null to trigger ProtectedRoute redirect
-            setUserName(sessionUser.email || 'User'); // Still use email for display if needed
-            console.warn('App: Profile fetch failed/timed out. UserType NOT set. Will redirect to login via ProtectedRoute.');
-          }
+            if (!isMounted) return; // Re-check if unmounted after async call
+
+            if (profile) {
+                setUser(sessionUser); // Set user from session
+                setUserType(profile.user_type); // Set userType from profile
+                setUserName(profile.name); // Set userName from profile
+                console.log('App: processSessionAndSetStatus - Profile found and set. UserType:', profile.user_type);
+            } else {
+                // If profile fetch fails (timeout/RLS), consider it an invalid state for dashboard access
+                // Clear user and userType, forcing ProtectedRoute to redirect to login.
+                setUser(null);
+                setUserType(null); // Explicitly set to null if profile cannot be fetched
+                setUserName("");
+                console.warn('App: processSessionAndSetStatus - Profile fetch failed/timed out. Forcing logout via ProtectedRoute.');
+                // Optionally, could force signOut here if profile is always mandatory for any access
+                // await supabase.auth.signOut();
+            }
         } else {
-            // If no session user, ensure userType is null
+            // No user session, ensure all auth related states are null/empty
+            setUser(null);
             setUserType(null);
-            console.log('App: No user in session from getSession.');
+            setUserName("");
+            // Ensure local storage is also cleared in this case for consistency
+            localStorage.removeItem('user_email');
+            localStorage.removeItem('user_id');
+            localStorage.removeItem('user_type');
+            console.log('App: processSessionAndSetStatus - No user session, cleared states.');
         }
-      } catch (error) {
-        console.error('❌ App: Auth initialization error (catch block):', error);
-        setUser(null);
-        setUserType(null); // Ensure userType is null on unexpected error
-        setUserName("");
-      } finally {
-        console.log('App: initializeAuth finished, setting checking to false.');
-        setChecking(false);
-      }
+
+        // IMPORTANT: Only set checking to false AFTER all session and profile processing is done
+        if (isMounted) {
+            console.log('App: processSessionAndSetStatus finished, setting checking to false.');
+            setChecking(false);
+        }
     };
 
-    initializeAuth();
-  }, []); // Runs once on mount
+    // --- Initial authentication check on mount ---
+    const initializeAuth = async () => {
+        console.log('🔍 App: initializeAuth started. Checking session (initial mount)...');
+        try {
+            const { data: sessionData, error } = await supabase.auth.getSession();
+            console.log('⚡️ App: supabase.auth.getSession() result on load:', sessionData, 'Error:', error);
 
-  useEffect(() => {
-    console.log('🔗 App: Setting up auth state listener...');
+            if (!isMounted) return; // Guard against unmount during async op
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔄 App: Auth state changed:', event, session?.user?.email || 'No user');
-      console.log('App: Auth state listener triggered.');
-
-      if (event === 'SIGNED_OUT' || !session) {
-        console.log('👋 App: Auth listener - User signed out or no session.');
-        setUser(null);
-        setUserType(null); // Ensure userType is null on sign out
-        setUserName("");
-        setChecking(false);
-        localStorage.removeItem('user_email');
-        localStorage.removeItem('user_id');
-        localStorage.removeItem('user_type');
-        return;
-      }
-
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || session) {
-        console.log('👤 App: Auth listener - Processing signed in user...');
-        const sessionUser = session?.user || null;
-        setUser(sessionUser);
-
-        if (sessionUser) {
-          console.log('App: Auth listener - User found, fetching profile...');
-          const profile = await fetchUserProfile(sessionUser);
-          if (profile) {
-            setUserType(profile.user_type);
-            setUserName(profile.name);
-            console.log('App: Auth listener - Profile found and set.');
-          } else {
-            // ✅ IMPORTANT CHANGE: If profile fetch fails/times out, DO NOT default userType to "client".
-            // Set userType to null to trigger ProtectedRoute redirect.
-            setUserType(null); // Set to null to trigger ProtectedRoute redirect
-            setUserName(sessionUser.email || 'User');
-            console.warn('App: Auth listener - Profile fetch failed/timed out. UserType NOT set. Will redirect to login via ProtectedRoute.');
-          }
-        } else {
-            // If no session user, ensure userType is null
-            setUserType(null);
-            console.log('App: Auth listener - No user in session.');
+            if (error) {
+                console.error('❌ App: Session error from getSession:', error);
+                await processSessionAndSetStatus(null); // Treat as no user if getSession fails
+            } else {
+                await processSessionAndSetStatus(sessionData?.session?.user || null);
+            }
+        } catch (error) {
+            console.error('❌ App: Auth initialization error (catch block):', error);
+            await processSessionAndSetStatus(null); // Treat as no user on unexpected error
         }
-        console.log('App: Auth listener processing finished, setting checking to false.');
-        setChecking(false);
-      }
+    };
+
+    initializeAuth(); // Call initial check
+
+    // --- Listener for real-time auth state changes ---
+    console.log('🔗 App: Setting up auth state listener...');
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('🔄 App: Auth state changed:', event, session?.user?.email || 'No user');
+        if (!isMounted) return; // Guard against unmount during async op
+
+        // This listener ensures our state is always in sync with Supabase Auth.
+        // It will call processSessionAndSetStatus which handles all state updates including setting checking to false.
+        await processSessionAndSetStatus(session?.user || null);
     });
 
+    // Cleanup function for useEffect
     return () => {
-      console.log('🔌 App: Cleaning up auth listener subscription.');
-      subscription.unsubscribe();
+        console.log('🔌 App: Cleaning up auth listener subscription and marking unmounted.');
+        isMounted = false; // Set flag to prevent further state updates
+        subscription.unsubscribe();
     };
-  }, []);
+  }, []); // Empty dependency array, runs once on mount
 
   const handleLogout = async () => {
     try {
@@ -317,8 +295,9 @@ const App = () => {
                 path="/dashboard"
                 element={
                   <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    {/* userType is guaranteed to be non-null by isAuthenticated check */}
                     <DashboardPage
-                      userType={userType!} // userType is guaranteed by isAuthenticated check
+                      userType={userType!}
                       userEmail={userName}
                       onLogout={handleLogout}
                     />
