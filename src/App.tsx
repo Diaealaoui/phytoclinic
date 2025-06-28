@@ -5,7 +5,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster as Sonner } => "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { supabase } from "@/lib/supabase";
 
@@ -220,6 +220,8 @@ const App = () => {
 
   if (checking) {
     console.log('App: Render - Showing loading state...');
+    // This return handles the main App loading state.
+    // ProtectedRoute will also show a loading state if passed 'checking = true'.
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -248,13 +250,18 @@ const App = () => {
 
               <Route
                 path="/analytics"
-                element={isAuthenticated ? <AnalyticsPage /> : <Navigate to="/login" />}
+                element={
+                  // Pass isCheckingAuth to ProtectedRoute
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                    <AnalyticsPage />
+                  </ProtectedRoute>
+                }
               />
 
               <Route
                 path="/sync-manager"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
                     <SyncManagerPage />
                   </ProtectedRoute>
                 }
@@ -264,7 +271,7 @@ const App = () => {
               <Route
                 path="/catalogue-upload"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
                     <CatalogueUploader />
                   </ProtectedRoute>
                 }
@@ -273,7 +280,7 @@ const App = () => {
               <Route
                 path="/catalogues"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
                     {/* Pass the resolved userType or default to 'client' if not determined,
                         though ideally userType would be null and ProtectedRoute handles redirection */}
                     <CatalogueViewer userType={userType || 'client'} />
@@ -285,7 +292,7 @@ const App = () => {
               <Route
                 path="/users"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
                     <UserManagementPage />
                   </ProtectedRoute>
                 }
@@ -294,7 +301,7 @@ const App = () => {
               <Route
                 path="/dashboard"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
                     {/* userType is guaranteed to be non-null by isAuthenticated check */}
                     <DashboardPage
                       userType={userType!}
@@ -308,7 +315,7 @@ const App = () => {
               <Route
                 path="/mindmap"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
                     <MindMapPage />
                   </ProtectedRoute>
                 }
@@ -317,7 +324,7 @@ const App = () => {
               <Route
                 path="/forum"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
                     <ForumPage />
                   </ProtectedRoute>
                 }
@@ -326,7 +333,7 @@ const App = () => {
               <Route
                 path="/csv"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
                     <CsvUploaderPage />
                   </ProtectedRoute>
                 }
@@ -335,7 +342,7 @@ const App = () => {
               <Route
                 path="/zoho"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
                     <ZohoPage />
                   </ProtectedRoute>
                 }
@@ -344,7 +351,7 @@ const App = () => {
               <Route
                 path="/history"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
                     <PurchaseHistoryPage />
                   </ProtectedRoute>
                 }
