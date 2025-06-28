@@ -1,9 +1,9 @@
-// src/App.tsx - Refined approach using single onAuthStateChange for initial state and all updates
-import { useEffect, useState, useRef } from "react"; // Import useRef
+// src/App.tsx - Corrected version with UserManagementPage route and improved logout, and extensive logging for debugging stuck on refresh
+import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } => "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { supabase } from "@/lib/supabase";
@@ -22,36 +22,56 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import SyncManagerPage from './pages/SyncManagerPage';
 import ProtectedRoute from "./components/ProtectedRoute";
 
+// Import catalogue components directly since we don't have separate page files yet
 import CatalogueUploader from './components/CatalogueUploader';
 import CatalogueViewer from './components/CatalogueViewer';
+
+// Import the new UserManagementPage
 import UserManagementPage from './pages/UserManagementPage';
 
 const queryClient = new QueryClient();
 
 const App = () => {
   const [user, setUser] = useState(null);
-  const [checking, setChecking] = useState(true); // Start as true, set to false once initial auth state is determined
+  const [checking, setChecking] = useState(true);
   const [userType, setUserType] = useState<'admin' | 'client' | null>(null);
   const [userName, setUserName] = useState<string>("");
 
-  // Use useRef to track if the initial onAuthStateChange event has been fully processed
-  const initialEventProcessedRef = useRef(false);
-
-  // fetchUserProfile function remains the same (it's already robust and logs well)
+  // Fetch user profile from your users table
   const fetchUserProfile = async (authUser: any) => {
     console.log('App: Entering fetchUserProfile for userId:', authUser?.id);
     if (!authUser?.id) {
       console.warn('App: fetchUserProfile - No authUser ID provided, returning null profile.');
       return null;
     }
-    const SUPABASE_QUERY_TIMEOUT = 10000;
+
+    const SUPABASE_QUERY_TIMEOUT = 10000; // Define a timeout duration (e.g., 10 seconds)
+
     try {
       console.log('App: Querying "users" table for profile (with timeout)...');
-      const profilePromise = supabase.from("users").select("id, email, name, user_type").eq("id", authUser.id).single();
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase profile query timed out')), SUPABASE_QUERY_TIMEOUT));
+      // Create a promise for the Supabase query
+      const profilePromise = supabase
+        .from("users")
+        .select("id, email, name, user_type")
+        .eq("id", authUser.id)
+        .single();
+
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Supabase profile query timed out')), SUPABASE_QUERY_TIMEOUT)
+      );
+
+      // Race the Supabase query against the timeout
       const result = await Promise.race([profilePromise, timeoutPromise]);
-      if (result instanceof Error) { throw result; }
+
+      // If the timeout wins, result will be an Error object
+      if (result instanceof Error) {
+        throw result; // Propagate the timeout error
+      }
+
+      // If Supabase query wins, it will be an object with data and error properties
       const { data: profile, error } = result;
+
       if (error) {
         if (error.code === 'PGRST116' && error.details === 'The result contains 0 rows') {
             console.warn('⚠️ App: User profile not found in "users" table, or RLS denied access:', error.message);
@@ -60,9 +80,10 @@ const App = () => {
         }
         return null;
       }
+
       console.log('✅ App: User profile loaded:', profile);
       return profile;
-    } catch (error: any) {
+    } catch (error: any) { // Type 'any' for the error object for flexibility
       console.error('❌ App: Error in fetchUserProfile catch block:', error.message || error);
       if (error.message === 'Supabase profile query timed out') {
         console.error('App: Supabase profile query exceeded timeout of', SUPABASE_QUERY_TIMEOUT, 'ms. This might indicate a slow database response or RLS issue.');
@@ -73,70 +94,107 @@ const App = () => {
     }
   };
 
+  useEffect(() => {
+    const initializeAuth = async () => {
+      console.log('🔍 App: initializeAuth started. Checking session...');
+      try {
+        const { data: sessionData, error } = await supabase.auth.getSession();
+        console.log('App: supabase.auth.getSession() completed.');
+
+        if (error) {
+          console.error('❌ App: Session error from getSession:', error);
+          setUser(null);
+          setUserType(null);
+          setUserName("");
+          console.log('App: getSession error path, setting checking to false.');
+          setChecking(false);
+          return;
+        }
+
+        const sessionUser = sessionData?.session?.user || null;
+        console.log('👤 App: Session user from getSession:', sessionUser?.email || 'No user');
+
+        setUser(sessionUser);
+
+        if (sessionUser) {
+          console.log('App: User found in session, fetching profile...');
+          const profile = await fetchUserProfile(sessionUser);
+
+          if (profile) {
+            setUserType(profile.user_type);
+            setUserName(profile.name);
+            console.log('App: Profile found and set.');
+          } else {
+            setUserType("client");
+            setUserName(sessionUser.email || 'User');
+            console.log('App: Profile NOT found, falling back to client type.');
+          }
+        } else {
+            console.log('App: No user in session from getSession.');
+        }
+      } catch (error) {
+        console.error('❌ App: Auth initialization error (catch block):', error);
+        setUser(null);
+        setUserType(null);
+        setUserName("");
+      } finally {
+        console.log('App: initializeAuth finished, setting checking to false.');
+        setChecking(false);
+      }
+    };
+
+    initializeAuth();
+  }, []);
 
   useEffect(() => {
-    let isMounted = true; // Flag to prevent state updates on unmounted component
-
     console.log('🔗 App: Setting up auth state listener...');
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return; // Guard against unmount during async op
-
       console.log('🔄 App: Auth state changed:', event, session?.user?.email || 'No user');
-
-      let currentUser = null;
-      let currentUserType: 'admin' | 'client' | null = null;
-      let currentUserName = "";
+      console.log('App: Auth state listener triggered.');
 
       if (event === 'SIGNED_OUT' || !session) {
-        console.log('👋 App: Auth listener - User signed out or no session. Finalizing logout state.');
-        // Clear all states and local storage on sign out
+        console.log('👋 App: Auth listener - User signed out or no session.');
+        setUser(null);
+        setUserType(null);
+        setUserName("");
+        setChecking(false);
         localStorage.removeItem('user_email');
         localStorage.removeItem('user_id');
         localStorage.removeItem('user_type');
-      } else { // SIGNED_IN, TOKEN_REFRESHED, or INITIAL_SESSION events
-        console.log('👤 App: Auth listener - Processing signed in user...');
-        currentUser = session.user; // Set user from the session
-        const profile = await fetchUserProfile(session.user); // Fetch profile for userType
-
-        if (!isMounted) return; // Re-check unmount after async call
-
-        if (profile) {
-          currentUserType = profile.user_type;
-          currentUserName = profile.name;
-          console.log('App: Auth listener profile found. UserType:', currentUserType);
-          // Also set local storage here to persist across app reloads outside of login form
-          // This ensures that even if LoginForm didn't set them, App does.
-          localStorage.setItem("user_email", session.user.email || '');
-          localStorage.setItem("user_id", profile.id);
-          localStorage.setItem("user_type", profile.user_type);
-        } else {
-          // If profile fetch fails/times out, we cannot reliably determine userType.
-          // Set userType to null. ProtectedRoute will redirect to login.
-          console.warn('App: Auth listener - Profile fetch failed/timed out. UserType NOT set. Will redirect via ProtectedRoute.');
-        }
+        return;
       }
 
-      // Update states based on the processing result
-      setUser(currentUser);
-      setUserType(currentUserType);
-      setUserName(currentUserName);
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || session) {
+        console.log('👤 App: Auth listener - Processing signed in user...');
+        const sessionUser = session?.user || null;
+        setUser(sessionUser);
 
-      // Crucially, set checking to false only AFTER the first comprehensive auth state has been handled.
-      // This ensures isAuthenticated is stable before routing decisions are made.
-      if (!initialEventProcessedRef.current && isMounted) { // Use ref here
-        console.log('App: Initial authentication state processed. Setting checking to false.');
+        if (sessionUser) {
+          console.log('App: Auth listener - User found, fetching profile...');
+          const profile = await fetchUserProfile(sessionUser);
+          if (profile) {
+            setUserType(profile.user_type);
+            setUserName(profile.name);
+            console.log('App: Auth listener - Profile found and set.');
+          } else {
+            setUserType("client");
+            setUserName(sessionUser.email || 'User');
+            console.log('App: Auth listener - Profile NOT found, falling back to client type.');
+          }
+        } else {
+            console.log('App: Auth listener - No user in session.');
+        }
+        console.log('App: Auth listener processing finished, setting checking to false.');
         setChecking(false);
-        initialEventProcessedRef.current = true; // Mark as handled
       }
     });
 
-    // Cleanup function for useEffect
     return () => {
-      console.log('🔌 App: Cleaning up auth listener subscription and marking unmounted.');
-      isMounted = false; // Set flag to prevent further state updates
+      console.log('🔌 App: Cleaning up auth listener subscription.');
       subscription.unsubscribe();
     };
-  }, []); // Empty dependency array, runs once on mount and handles all auth state changes
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -174,21 +232,18 @@ const App = () => {
 
   if (checking) {
     console.log('App: Render - Showing loading state...');
-    // This return handles the main App loading state.
-    // ProtectedRoute will also show a loading state if passed 'checking = true'.
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold text-gray-700 mb-2">Loading authentication...</h2>
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">Loading...</h2>
           <p className="text-gray-500">Checking your session</p>
         </div>
       </div>
     );
   }
-  // This `isAuthenticated` check now correctly relies on userType being determined
-  console.log('App: Render - Checking complete, isAuthenticated:', !!user, 'UserType:', userType);
-  const isAuthenticated = !!user && !!userType && !checking; // userType must be not null for auth
+  console.log('App: Render - Checking complete, isAuthenticated:', !!user);
+  const isAuthenticated = !!user && !!userType && !checking;
 
   return (
     <ThemeProvider defaultTheme="light">
@@ -202,29 +257,25 @@ const App = () => {
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
 
-              {/* All Protected Routes now correctly use isCheckingAuth={checking} */}
               <Route
                 path="/analytics"
-                element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
-                    <AnalyticsPage />
-                  </ProtectedRoute>
-                }
+                element={isAuthenticated ? <AnalyticsPage /> : <Navigate to="/login" />}
               />
 
               <Route
                 path="/sync-manager"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <SyncManagerPage />
                   </ProtectedRoute>
                 }
               />
 
+              {/* Catalogue routes using components directly */}
               <Route
                 path="/catalogue-upload"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <CatalogueUploader />
                   </ProtectedRoute>
                 }
@@ -233,16 +284,17 @@ const App = () => {
               <Route
                 path="/catalogues"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <CatalogueViewer userType={userType || 'client'} />
                   </ProtectedRoute>
                 }
               />
 
+              {/* New Route for User Management Page */}
               <Route
                 path="/users"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <UserManagementPage />
                   </ProtectedRoute>
                 }
@@ -251,9 +303,9 @@ const App = () => {
               <Route
                 path="/dashboard"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <DashboardPage
-                      userType={userType!} // userType is guaranteed to be non-null by isAuthenticated check
+                      userType={userType!}
                       userEmail={userName}
                       onLogout={handleLogout}
                     />
@@ -264,7 +316,7 @@ const App = () => {
               <Route
                 path="/mindmap"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <MindMapPage />
                   </ProtectedRoute>
                 }
@@ -273,7 +325,7 @@ const App = () => {
               <Route
                 path="/forum"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <ForumPage />
                   </ProtectedRoute>
                 }
@@ -282,7 +334,7 @@ const App = () => {
               <Route
                 path="/csv"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <CsvUploaderPage />
                   </ProtectedRoute>
                 }
@@ -291,7 +343,7 @@ const App = () => {
               <Route
                 path="/zoho"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <ZohoPage />
                   </ProtectedRoute>
                 }
@@ -300,7 +352,7 @@ const App = () => {
               <Route
                 path="/history"
                 element={
-                  <ProtectedRoute isAuthenticated={isAuthenticated} isCheckingAuth={checking}>
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <PurchaseHistoryPage />
                   </ProtectedRoute>
                 }
